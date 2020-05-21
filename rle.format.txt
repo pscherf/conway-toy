@@ -1,0 +1,17 @@
+#C comment
+#c comment
+#N pattern name
+#O when and whom created
+#P same as R
+#R top left coordinates
+#r rules (23/3 for Life)
+
+x = m, y = n, rule = abc
+width and height
+
+num_count tag (omitted num_count == 1)
+
+b = dead
+o = alive
+$ = end of line
+! = end of file
