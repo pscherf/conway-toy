@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import curses
+import glob
 
 def lim(n, limit):
     if n < 0: return n + limit
@@ -41,6 +42,97 @@ def board_to_window(scr, b):
         for c in range(c_max):
             scr.addstr(r, c, '*' if b[r][c] else ' ')
 
+def add_cw_at(scr, board, y, x, name):
+    with open(name, 'r') as f:
+        row = y
+        while True:
+            line = f.readline()
+            if len(line) == 0:
+                break
+            col = x
+            for ch in line:
+                if ch == '*':
+                    board[row][col] = True
+                    scr.addch(row, col, '*')
+                col = lim(col + 1, c_max)
+            row = lim(row + 1, r_max)
+    scr.refresh()
+
+# 6enginecordership.rle
+# 6inarowcordership.rle
+# glider.rle
+# gosper-glider.rle
+# hwss.rle
+# lightweight-emulator.rle
+# lwss.rle
+# lwssonhwss.rle
+# lwssonmwss.rle
+# mwss.rle
+# sirrobin.rle
+# tagalong.rle
+# toaster.rle
+# two-lightweight-spaceships.rle
+def add_rle_at(scr, board, y, x, name):
+    with open(name, 'r') as f:
+        line = f.readline()
+        while True:
+            if line[0] != '#':
+                break
+            line = f.readline()
+        if line[0] == 'x':
+            line = f.readline()
+        row = y
+        col = x
+        while True:
+            for c in line:
+                if isdigit(chr(c)):
+                    number = 10 * number + ord(c) - ord('0')
+                elif chr(c) == 'b':
+                    board[row][col] = False
+                    scr.addch(row, col, ' ')
+                    col = lim(col + 1, c_max)
+                elif chr(c) == 'o':
+                    board[row][col] = True
+                    scr.addch(row, col, '*')
+                    col = lim(col + 1, c_max)
+                elif chr(c) == '$':
+                    row = lim(row + 1, r_max)
+                    col = x
+                elif chr(c) == '!':
+                    return
+                # else some unknown character
+            line = f.readline()
+    scr.refresh()
+
+def get_menu(scr):
+    filenames = glob.glob('*.cw') + glob.glob('*.rle')
+    height = len(filenames) + 2
+    width = 40
+    begin_y = 7
+    begin_x = 20
+    menu = curses.newwin(height, width, begin_y, begin_x)
+    menu.border('|', '|', '-', '-', '+', '+', '+', '+')
+    for i, filename in enumerate(filenames):
+        menu.addstr(i + 1, 1, str(i) + ' ' + filename)
+    # menu.addstr(1, 1, 'lines = ' + str(curses.LINES))
+    # menu.addstr(2, 1, 'cols = ' + str(curses.COLS))
+    menu.refresh()
+    # await input
+    empty = True
+    number = 0
+    while True:
+        c = menu.getch()
+        if c < 0:
+            continue
+        if chr(c).isdigit():
+            number = 10 * number + c - ord('0')
+            empty = False
+        elif c == ord('\n'):
+            break
+    menu = None
+    scr.refresh()
+    return None if empty else filenames[number]
+
 def check_input(scr, board):
     scr.refresh()
     c = scr.getch()
@@ -64,8 +156,28 @@ def check_input(scr, board):
             elif c == curses.KEY_DOWN:
                 row = lim(row + 1, r_max)
                 scr.move(row, col)
-            # elif chr(c) == 'g': glider
-            # elif chr(c) == 'x': ...
+            elif chr(c) == 'a': add_cw_at(scr, board, row, col, 'acorn.cw')
+            elif chr(c) == 'b': add_cw_at(scr, board, row, col, 'block-laying-switch-engine.cw')
+            elif chr(c) == 'c':
+                for r in range(r_max):
+                    for c in range(c_max):
+                        board[r][c] = False
+                scr.clear()
+            elif chr(c) == 'd': add_cw_at(scr, board, row, col, 'diehard.cw')
+            elif chr(c) == 'g': add_cw_at(scr, board, row, col, 'glider.cw')
+            elif chr(c) == 'i': add_cw_at(scr, board, row, col, 'infinite-growth.cw')
+            elif chr(c) == 'l': add_cw_at(scr, board, row, col, 'lightweight-spaceship.cw')
+            elif chr(c) == 'm':
+                filename = get_menu(scr)
+                if filename.endswith('.cw'):
+                    add_cw_at(scr, board, row, col, filename)
+                elif filename.endswith('.rle'):
+                    add_rle_at(scr, board, row, col, filename)
+            elif chr(c) == 'q': return True
+            elif chr(c) == 'r': add_cw_at(scr, board, row, col, 'rpentomino.cw')
+            elif chr(c) == 's': add_cw_at(scr, board, row, col, 'sailboat.cw')
+            elif chr(c) == 'S': add_cw_at(scr, board, row, col, 'single-block-laying-switch-engine2.cw')
+            # elif c == curses.KEY_HOME:
             # ...
             elif chr(c) == '.':
                 if board[row][col]:
@@ -81,7 +193,6 @@ def check_input(scr, board):
             # arrow keys to navigate
             # '.' key to toggle
             # ' ' key to continue
-        pass
     return c >= 0 and chr(c) == 'q'
 
 def main(stdscr):
