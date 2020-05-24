@@ -2,10 +2,417 @@
 
 import curses
 import glob
+import sys
+
+class col_gen(object):
+    # assert: new col >= all previous col
+
+    def __init__(self, col_list, on_empty):
+        self.nxt_iter = col_list.__iter__()
+        self.prv = None
+        if len(col_list) == 0:
+            self.cur = None # never == col
+            self.nxt = None
+            on_empty()
+            self.get_count = self.get_end
+            return
+        self.on_empty = on_empty
+        # get a first self.cur
+        self.cur = next(self.nxt_iter)
+        if len(col_list) == 1:
+            self.nxt = None
+            self.get_count = self.get_lst
+            return
+        # get a first self.nxt
+        self.nxt = next(self.nxt_iter)
+        if self.cur == self.nxt - 1:
+            self.get_count = self.get_n0
+        elif self.cur == self.nxt - 2:
+            self.get_count = self.get_n1
+        else:
+            self.get_count = self.get_nn
+
+    def _advance_not_end(self, col):
+        while col > self.cur:
+            self.prv = self.cur
+            self.cur = self.nxt
+            try:
+                self.nxt = next(self.nxt_iter)
+            except StopIteration: # *x lst end
+                # self.nxt = None
+                if self.prv + 1 == self.cur:
+                    self.get_count = self.get_0x
+                elif self.prv + 2 == self.cur:
+                    self.get_count = self.get_1x
+                elif self.prv + 3 == self.cur:
+                    self.get_count = self.get_2x
+                else:
+                    self.get_count = self.get_lst
+                break
+        else:
+            if self.cur == self.nxt - 1: # *0
+                if self.prv + 1 == self.cur:
+                    self.get_count = self.get_00
+                elif self.prv + 2 == self.cur:
+                    self.get_count = self.get_10
+                elif self.prv + 3 == self.cur:
+                    self.get_count = self.get_20
+                else:
+                    self.get_count = self.get_n0
+            elif self.cur == self.nxt - 2: # *1
+                if self.prv + 1 == self.cur:
+                    self.get_count = self.get_01
+                elif self.prv + 2 == self.cur:
+                    self.get_count == self.get_11
+                elif self.prv + 3 == self.cur:
+                    self.get_count == self.get_21
+                else:
+                    self.get_count == self.get_n1
+            else: # *n
+                if self.prv + 1 == self.cur:
+                    self.get_count = self.get_0n
+                elif self.prv + 2 == self.cur:
+                    self.get_count = self.get_1n
+                elif self.prv + 3 == self.cur:
+                    self.get_count = self.get_2n
+                else:
+                    self.get_count = self.get_nn
+        return self.get_count(col)
+
+    def _advance_end(self, col): # from *x
+        self.cur = None # never == col
+        self.on_empty()
+        self.get_count = self.get_end
+        return self.get_count(col)
+
+    def get_00(self, col):
+        if col <= self.cur:
+            return 3
+        return self._advance_not_end(col)
+
+    def get_10(self, col):
+        if col <= self.cur:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_20(self, col):
+        if col < self.cur:
+            return 1
+        if col == self.cur:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_n0(self, col):
+        if col < self.cur - 1:
+            return 0
+        if col < self.cur:
+            return 1
+        if col == self.cur:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_01(self, col):
+        if col <= self.cur + 1:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_11(self, col):
+        if col < self.cur:
+            return 2
+        if col == self.cur:
+            return 1
+        if col == self.cur + 1:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_21(self, col):
+        if col <= self.cur:
+            return 1
+        if col == self.cur + 1:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_n1(self, col):
+        if col <= self.cur:
+            return 1
+        if col == self.cur + 1:
+            return 2
+        return self._advance_not_end(col)
+
+    def get_0n(self, col):
+        if col == self.cur:
+            return 2
+        if col == self.cur + 1:
+            return 1
+        return self._advance_not_end(col)
+
+    def get_1n(self, col):
+        if col < self.cur:
+            return 2
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_not_end(col)
+
+    def get_2n(self, col):
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_not_end(col)
+
+    def get_nn(self, col):
+        if col < self.cur - 1:
+            return 0
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_not_end(col)
+
+    def get_0x(self, col):
+        if col == self.cur:
+            return 2
+        if col == self.cur + 1:
+            return 1
+        return self._advance_end(col)
+
+    def get_1x(self, col):
+        if col < self.cur:
+            return 2
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_end(col)
+
+    def get_2x(self, col):
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_end(col)
+
+    def get_lst(self, col):
+        if col < self.cur - 1:
+            return 0
+        if col <= self.cur + 1:
+            return 1
+        return self._advance_end(col)
+
+    def get_end(self, col):
+        return 0
+
+    def is_live(self, col): return col == self.cur
+
+    def _past_end(self): return self.get_count == self.get_end
+    def amend_col_number(self, col_number):
+        if self._past_end():
+            return col_number
+        if col_number is None:
+            return self.cur - 1
+        return min(self.cur - 1, col_number)
+
+    def __str__(self):
+        return ('col_gen('
+                # + ' iter=' + str(self.nxt_iter)
+                # + ' empty=' + str(self.on_empty)
+                + ' prv=' + str(self.prv)
+                + ' cur=' + str(self.cur)
+                + ' nxt=' + str(self.nxt)
+                + ' get=' + str(self.get_count)
+                + ')')
+
+if False:
+    # col_gen tests
+    def test_col_gen(cols, attempts):
+        empty_list = [0]
+        def on_empty(empty_list=empty_list):
+            empty_list[0] += 1
+            print('on_empty')
+        print(str(cols) + ' ' + str(attempts))
+        c = col_gen(cols, on_empty)
+        print('c=' + str(c))
+        for a in attempts:
+            print('get_count(' + str(a) + ') = ' + str(c.get_count(a)) + ' c=' + str(c))
+        print()
+    test_col_gen([], [10, 20, 30])
+    test_col_gen([10, 11, 12], [8, 9, 10, 11, 12, 13, 14])
+    test_col_gen([10, 20, 30], [18, 19, 20, 21, 22, 23, 24])
+    sys.exit(0)
+
+class cw(object):
+
+    def __init__(self):
+        self.rows = [] # [(row_number, [col_number ...])]
+
+    def prt(scr, self):
+        # sparse coordinate collection:
+        scr.clear()
+        for row_number, cols in self.rows: # list((row_number, list(col_number)))
+            if r_max <= row_number:
+                break
+            if 0 <= row_number:
+                for col_number in cols:
+                    if c_max <= col_number:
+                        break
+                    if 0 <= col_number:
+                        scr.addstr(row_number, col_number, '*')
+
+    def generation(self):
+        print('generation:')
+        row_prv = None # old row_number_new - 1 ow/ None
+        row_cur = None # old row_number_new ow/ None
+        row_nxt = None # old row_number_new + 1 ow/ None
+        r = 0 # next self.rows[*} to pull in
+        len_self_rows = len(self.rows)
+        cw_new = cw()
+        while True:
+            # calculate row_number_new, advance row_*, r
+            if row_cur is not None: # advance to row_cur[0] + 1
+                row_number_new = row_cur[0] + 1
+                row_prv = row_cur
+                row_cur = row_nxt
+                if r < len_self_rows and self.rows[r][0] == row_number_new + 1:
+                    row_nxt = self.rows[r]
+                    r += 1
+                else:
+                    row_nxt = None
+            elif row_nxt is not None: # row_cur is None, advance to row_nxt[0]
+                row_number_new = row_nxt[0]
+                row_prv = None
+                row_cur = row_nxt
+                if r < len_self_rows and self.rows[r][0] == row_number_new + 1:
+                    row_nxt = self.rows[r]
+                    r += 1
+                else:
+                    row_nxt = None
+            elif r < len_self_rows: # row_cur is None and row_nxt is None, advance to self.rows[r][0] - 1
+                row_number_new = self.rows[r][0] - 1
+                row_prv = None
+                row_cur = None
+                row_nxt = self.rows[r]
+                r += 1
+            else: # row_cur is None and row_nxt is None and r == len_self_rows, stop
+                break
+            print('generation:'
+                    + ' row_number_new=' + str(row_number_new)
+                    + ' row_prv=' + str(row_prv)
+                    + ' row_cur=' + str(row_cur)
+                    + ' row_nxt=' + str(row_nxt))
+
+            # produce new row (a new row_cur)
+
+            past_end_list = [0]
+            def on_past_end(past_end_list=past_end_list): past_end_list[0] += 1
+            cols_prv = col_gen(row_prv[1] if row_prv else [], on_past_end)
+            cols_cur = col_gen(row_cur[1] if row_cur else [], on_past_end)
+            cols_nxt = col_gen(row_nxt[1] if row_nxt else [], on_past_end)
+
+            cols_new = [] # the new cols_cur
+            col_number = None
+            while past_end_list[0] < 3:
+                amended_col_number = cols_nxt.amend_col_number(cols_cur.amend_col_number(cols_prv.amend_col_number(None)))
+                col_number = amended_col_number if col_number is None else max(col_number + 1, amended_col_number)
+                ## append new item to cols_new, if needed
+                neighbor_count = cols_prv.get_count(col_number) + cols_cur.get_count(col_number) + cols_nxt.get_count(col_number)
+                print('col=' + str(col_number) + ' neighbor_count=' + str(neighbor_count))
+                if cols_cur.is_live(col_number):
+                    if neighbor_count - 1 in [2, 3]:
+                        cols_new.append(col_number)
+                else:
+                    if neighbor_count == 3:
+                        cols_new.append(col_number)
+            if len(cols_new) > 0:
+                cw_new.rows.append((row_number_new, cols_new))
+
+        return cw_new
+
+    def add(self, row, col):
+        for r in range(len(self.rows)):
+            row_r = self.rows[r]
+            row_number = row_r[0]
+            if row_number == row: # found the row
+                cols = row_r[1]
+                for c in range(len(cols)):
+                    col_number = cols[c]
+                    if col_number == col: # duplicate
+                        return
+                    if col_number > col: # new col not at end
+                        cols[c : c] = [col]
+                        return
+                cols.append(col) # new col at end
+                return
+            if row_number > row: # new row not at end
+                self.rows[r : r] = [(row, [col])]
+                return
+        self.rows.append((row, [col])) # new row at end
+
+    def rem(self, row, col):
+        for r in range(len(self.rows)):
+            if self.rows[r][0] == row: # found the row
+                if col in self.rows[r][1]:
+                    self.rows[r][1].remove(col)
+                    if len(self.rows[r][1]) == 0:
+                        del self.rows[r] # last entry in row
+                return
+            if self.rows[r][0] > row: # not there, no such row
+                return
+        # not there, after last current row
+
+    def __str__(self):
+        return '[' + ' '.join('(' + str(row_number) + ', ' + '[' + ', '.join(str(c) for c in cols) + ']' + ')' for row_number, cols in self.rows) + ']'
+
+# cw tests
+c = cw()
+# print('c.rows=' + str(c))
+
+if False:
+    def test_add(c, row, col):
+        c.add(row, col)
+        # print('test_add: ' + str(row) + ', ' + str(col) + ': ' + str(c))
+    if False:
+        test_add(c, 5, 55)
+        test_add(c, 5, 51)
+        test_add(c, 5, 58)
+        test_add(c, 8, 85)
+        test_add(c, 8, 81)
+        test_add(c, 8, 88)
+        test_add(c, 3, 35)
+        test_add(c, 3, 31)
+        test_add(c, 3, 38)
+    if True:
+        def glider(y, x):
+            test_add(c, y + 0, x + 1)
+            test_add(c, y + 1, x + 2)
+            test_add(c, y + 2, x + 0)
+            test_add(c, y + 2, x + 1)
+            test_add(c, y + 2, x + 2)
+        glider(0, 100)
+        glider(100, 100)
+
+    print('test_generation: before: ' + str(c))
+    print('test_generatin: new ' + str(c.generation()))
+    print('test_generation: after:  ' + str(c))
+
+if False:
+    def test_rem(c, row, col):
+        c.rem(row, col)
+        # print('test_rem: ' + str(row) + ', ' + str(col) + ': ' + str(c))
+    # print('c.rows=' + str(c))
+    test_rem(c, 5, 55) # middle column
+    test_rem(c, 8, 88) # last column
+    test_rem(c, 3, 31) # first column
+    test_rem(c, 5, 100) # after last column
+    test_rem(c, 5, 52) # between columns
+    test_rem(c, 5, 0) # before first column
+    test_rem(c, 10, 12) # after last row
+    test_rem(c, 6, 66) # between rows
+    test_rem(c, 1, 1) # before first row
+
+    test_rem(c, 5, 58) # middle row
+    test_rem(c, 5, 51)
+
+    test_rem(c, 8, 81) # last row
+    test_rem(c, 8, 85)
+
+    test_rem(c, 3, 38) # first row
+    test_rem(c, 3, 35)
 
 def lim(n, limit):
-    if n < 0: return n + limit
-    if n >= limit: return n - limit
+    while n < 0: n += limit
+    while n >= limit: n -= limit
     return n
 
 def count_neighbors(board, r, c):
@@ -42,8 +449,8 @@ def board_to_window(scr, b):
         for c in range(c_max):
             scr.addstr(r, c, '*' if b[r][c] else ' ')
 
-def add_cw_at(scr, board, y, x, name):
-    with open(name, 'r') as f:
+def add_cw_at(scr, board, y, x, filename):
+    with open(filename, 'r') as f:
         row = y
         while True:
             line = f.readline()
@@ -58,22 +465,8 @@ def add_cw_at(scr, board, y, x, name):
             row = lim(row + 1, r_max)
     scr.refresh()
 
-# 6enginecordership.rle
-# 6inarowcordership.rle
-# glider.rle
-# gosper-glider.rle
-# hwss.rle
-# lightweight-emulator.rle
-# lwss.rle
-# lwssonhwss.rle
-# lwssonmwss.rle
-# mwss.rle
-# sirrobin.rle
-# tagalong.rle
-# toaster.rle
-# two-lightweight-spaceships.rle
-def add_rle_at(scr, board, y, x, name):
-    with open(name, 'r') as f:
+def add_rle_at(scr, board, y, x, filename):
+    with open(filename, 'r') as f:
         line = f.readline()
         while True:
             if line[0] != '#':
@@ -83,22 +476,29 @@ def add_rle_at(scr, board, y, x, name):
             line = f.readline()
         row = y
         col = x
+        number = 0
         while True:
             for c in line:
-                if isdigit(chr(c)):
+                if c.isdigit():
                     number = 10 * number + ord(c) - ord('0')
-                elif chr(c) == 'b':
-                    board[row][col] = False
-                    scr.addch(row, col, ' ')
-                    col = lim(col + 1, c_max)
-                elif chr(c) == 'o':
-                    board[row][col] = True
-                    scr.addch(row, col, '*')
-                    col = lim(col + 1, c_max)
-                elif chr(c) == '$':
-                    row = lim(row + 1, r_max)
+                elif c == 'b':
+                    for _ in range(max(number, 1)):
+                        board[row][col] = False
+                        scr.addch(row, col, ' ')
+                        col = lim(col + 1, c_max)
+                    number = 0
+                elif c == 'o':
+                    for _ in range(max(number, 1)):
+                        board[row][col] = True
+                        scr.addch(row, col, '*')
+                        col = lim(col + 1, c_max)
+                    number = 0
+                elif c == '$':
+                    for _ in range(max(number, 1)):
+                        row = lim(row + 1, r_max)
                     col = x
-                elif chr(c) == '!':
+                    number = 0
+                elif c == '!':
                     return
                 # else some unknown character
             line = f.readline()
@@ -107,38 +507,43 @@ def add_rle_at(scr, board, y, x, name):
 def get_menu(scr):
     filenames = glob.glob('*.cw') + glob.glob('*.rle')
     height = len(filenames) + 2
-    width = 40
-    begin_y = 7
-    begin_x = 20
-    menu = curses.newwin(height, width, begin_y, begin_x)
+    width = max((1 + len(filename) + 1 for filename in filenames), default=40)
+    begin_y = curses.LINES // 16
+    begin_x = curses.COLS // 16
+    menu = curses.newpad(height, width)
+    scr.leaveok(False)
     menu.border('|', '|', '-', '-', '+', '+', '+', '+')
     for i, filename in enumerate(filenames):
-        menu.addstr(i + 1, 1, str(i) + ' ' + filename)
-    # menu.addstr(1, 1, 'lines = ' + str(curses.LINES))
-    # menu.addstr(2, 1, 'cols = ' + str(curses.COLS))
-    menu.refresh()
-    # await input
-    empty = True
+        menu.addstr(i + 1, 1, filename)
     number = 0
+    escaped = False
+    scr.move(begin_y + number + 1, begin_x + 1)
+    menu.refresh(0,0, begin_y,begin_x, begin_y+height-1,begin_x+width-1)
     while True:
-        c = menu.getch()
+        c = scr.getch()
         if c < 0:
             continue
-        if chr(c).isdigit():
-            number = 10 * number + c - ord('0')
-            empty = False
+        if c == curses.KEY_UP:
+            number = lim(number - 1, height - 2)
+            scr.move(begin_y + number + 1, begin_x + 1)
+        elif c == curses.KEY_DOWN:
+            number = lim(number + 1, height - 2)
+            scr.move(begin_y + number + 1, begin_x + 1)
+        elif c == ord('\t'): # tab
+            escaped = True
+            break
         elif c == ord('\n'):
             break
-    menu = None
-    scr.refresh()
-    return None if empty else filenames[number]
+        # menu.refresh(0,0, begin_y,begin_x, begin_y+height-1,begin_x+width-1)
+    del menu
+    return None if escaped else filenames[number]
 
 def check_input(scr, board):
     scr.refresh()
     c = scr.getch()
     if c >= 0 and chr(c) == ' ': # pause for editing
-        row = 0
-        col = 0
+        row = curses.LINES // 2
+        col = curses.COLS // 2
         scr.move(row, col)
         while True:
             c = scr.getch()
@@ -156,29 +561,24 @@ def check_input(scr, board):
             elif c == curses.KEY_DOWN:
                 row = lim(row + 1, r_max)
                 scr.move(row, col)
-            elif chr(c) == 'a': add_cw_at(scr, board, row, col, 'acorn.cw')
-            elif chr(c) == 'b': add_cw_at(scr, board, row, col, 'block-laying-switch-engine.cw')
             elif chr(c) == 'c':
                 for r in range(r_max):
                     for c in range(c_max):
                         board[r][c] = False
                 scr.clear()
-            elif chr(c) == 'd': add_cw_at(scr, board, row, col, 'diehard.cw')
-            elif chr(c) == 'g': add_cw_at(scr, board, row, col, 'glider.cw')
-            elif chr(c) == 'i': add_cw_at(scr, board, row, col, 'infinite-growth.cw')
-            elif chr(c) == 'l': add_cw_at(scr, board, row, col, 'lightweight-spaceship.cw')
+                scr.move(row, col)
             elif chr(c) == 'm':
                 filename = get_menu(scr)
-                if filename.endswith('.cw'):
+                board_to_window(scr, board)
+                scr.refresh()
+                if filename is None:
+                    pass
+                elif filename.endswith('.cw'):
                     add_cw_at(scr, board, row, col, filename)
                 elif filename.endswith('.rle'):
                     add_rle_at(scr, board, row, col, filename)
-            elif chr(c) == 'q': return True
-            elif chr(c) == 'r': add_cw_at(scr, board, row, col, 'rpentomino.cw')
-            elif chr(c) == 's': add_cw_at(scr, board, row, col, 'sailboat.cw')
-            elif chr(c) == 'S': add_cw_at(scr, board, row, col, 'single-block-laying-switch-engine2.cw')
-            # elif c == curses.KEY_HOME:
-            # ...
+            elif chr(c) == 'q':
+                return True
             elif chr(c) == '.':
                 if board[row][col]:
                     scr.addch(row, col, ' ')
@@ -227,179 +627,3 @@ def main(stdscr):
         generation(board_2, board_1)
 
 curses.wrapper(main)
-
-class cw(object):
-    # [(row_number, [col_number ...])]
-
-    def __init__(self):
-        self.rows = []
-
-    def prt(scr, self):
-        # sparse coordinate collection:
-        scr.clear()
-        for row_number, cols in self.rows: # list((row_number, list(col_number)))
-            if r_max <= row_number:
-                break
-            if 0 <= row_number:
-                for col_number in cols:
-                    if c_max <= col_number:
-                        break
-                    if 0 <= col_number:
-                        scr.addstr(row_number, col_number, '*')
-
-    def generation(self):
-        rows = [None, None, None]
-        row = 0
-        rows_len = len(self.rows)
-        cw_new = cw()
-        while True:
-            # calculate row_number, advance rows, row
-            if rows[1] is not None: # advance to rows[1][0] + 1
-                row_number = rows[1][0] + 1
-                rows[0] = rows[1]
-                rows[1] = rows[2]
-                if row < rows_len and self.rows[row][0] == row_number + 1:
-                    rows[2] = self.rows[row]
-                    row += 1
-                else:
-                    rows[2] = None
-            elif rows[2] is not None: # rows[1] is None, advance to rows[2][0]
-                row_number = rows[2][0]
-                rows[0] = None
-                rows[1] = rows[2]
-                if row < rows_len and self.rows[row][0] == row_number + 1:
-                    rows[2] = self.rows[row]
-                    row += 1
-                else:
-                    rows[2] = None
-            elif row < rows_len: # rows[1] is None and rows[2] is None, advance to self.rows[row] - 1
-                row_number = self.rows[row] - 1
-                rows[0] = None
-                rows[1] = None
-                rows[2] = self.rows[row]
-                row += 1
-            else: # rows[1] is None and rows[2] is None and row == rows_len, stop
-                break
-
-            # produce new row (a new rows[1])
-
-            cols_prv = [] if rows[0] else rows[0][1]
-            col_prv = 0
-            cols_prv_len = len(cols_prv)
-
-            cols_cur = [] if rows[1] else rows[1][1]
-            col_cur = 0
-            cols_cur_len = len(cols_cur)
-
-            cols_nxt = [] if rows[2] else rows[2][1]
-            col_nxt = 0
-            cols_nxt_len = len(cols_nxt)
-
-            cols_new = [] # a new cols_cur
-            ## set col_number
-            if col_prv < cols_prv_len:
-                col_number = cols_prv[col_prv] - 1
-                if col_cur < cols_cur_len and cols_cur[col_cur] - 1 < col_number:
-                    col_number = cols_cur[col_cur] - 1
-                if col_nxt < cols_nxt_len and cols_nxt[col_nxt] - 1 < col_number:
-                    col_number = cols_nxt[col_nxt] - 1
-            elif col_cur < cols_cur_len:
-                col_number = cols_cur[col_cur] - 1
-                if col_nxt < cols_nxt_len and cols_nxt[col_nxt] - 1 < col_number:
-                    col_number = cols_nxt[col_nxt] - 1
-            elif col_nxt < cols_nxt_len:
-                col_number = cols_nxt[col_cur] - 1
-            else:
-                break
-
-            while True:
-                ## append new item to cols_new, if needed
-                neighbor_count = (self.add_col(cols_prv, col_prv, col_prv_len, col_number)
-                    + self.add_col(cols_cur, col_cur, col_cur_len, col_number)
-                    + self.add_col(cols_nxt, col_nxt, col_nxt_len, col_number))
-                if self.col_live(cols_cur, col_cur, col_cur_len, col_number):
-                    if neighbor_count - 1 in [2, 3]:
-                        cols_new.append(col_number)
-                else:
-                    if neighbor_count == 3:
-                        cols_new.append(col_number)
-                ## advance to next col_number or break
-                # skip past cols_*[col_*] <= col_number - 1
-                if col_prv < col_prv_len and cols_prv[col_prv] <= col_number - 1: col_prv += 1
-                if col_cur < col_cur_len and cols_cur[col_cur] <= col_number - 1: col_cur += 1
-                if col_nxt < col_nxt_len and cols_nxt[col_nxt] <= col_number - 1: col_nxt += 1
-                col_number += 1
-                # calculate col_number_min = min(cols_*[col_*] - 1)
-                if col_prv < col_prv_len:
-                    col_number_min = cols_prv[col_prv] - 1
-                    if col_cur < col_cur_len and col_number_min > cols_cur[col_cur] - 1:
-                        col_number_min = cols_cur[col_cur] - 1
-                    if col_nxt < col_nxt_len and col_number_min > cols_nxt[col_nxt] - 1:
-                        col_number_min = cols_nxt[col_nxt] - 1
-                elif col_cur < col_cur_len:
-                    col_number_min = cols_cur[col_cur] - 1
-                    if col_nxt < col_nxt_len and col_number_min > cols_nxt[col_nxt] - 1:
-                        col_number_min = cols_nxt[col_nxt] - 1
-                elif col_nxt < col_nxt_len:
-                    col_number_min = cols_nxt[col_nxt] - 1
-                else:
-                    break # stop if we are done
-                # adjust col_number if neccessary
-                if col_number < col_number_min:
-                    col_number = col_number_min
-                ## skip past cols_*[col_*] that are less than col_number - 1
-                while col_prv < col_prv_len and cols_prv[col_prv] < col_number - 1: col_prv += 1
-                while col_cur < col_cur_len and cols_cur[col_cur] < col_number - 1: col_cur += 1
-                while col_nxt < col_nxt_len and cols_nxt[col_nxt] < col_number - 1: col_nxt += 1
-                ## stop if we fell off the end
-                if col_prv >= col_prv_len and col_cur >= col_cur_len and col_nxt >= col_nxt_len:
-                    break # I don't think we get here
-            cw_new.rows.append((row_number, cols_new))
-
-        return cw_new
-
-    def col_live(self, cols_cur, col_cur, col_cur_len, col_number):
-        for c in [0, 1, 2]:
-            if col_cur_len <= col_cur + c:
-                return False
-            col_num = cols_cur[col_cur + c]
-            if col_num == col_number:
-                return True
-            if col_num < col_number:
-                return False
-        return False
-
-    def add_col(self, cols, col, col_len, col_number):
-        for c in [0, 1, 2]:
-            if col_len <= col + c or 1 < abs(cols[col + c] - col_number):
-                return c
-        return 3
-
-    def add(self, row, col):
-        for r in range(len(self.rows)):
-            if self.rows[r][0] == row: # found the row
-                for c in range(len(self.rows[r][1])):
-                    if self.rows[r][1][c] == col: # duplicate
-                        return
-                    if self.rows[r][1][c] < col: # new col not at end
-                        self.rows[r][1][c : c] = col
-                        return
-                self.rows[r][1][-1] = [col] # new col at end
-                return
-            if self.rows[r][0] < row: # new row not at end
-                self.rows[r : r] = [col]
-                return
-        self.rows[-1] = (row, [col]) # new row at end
-
-    def rem(self, row, col):
-        for r in range(len(self.rows)):
-            if self.rows[r][0] == row: # found the row
-                if col in self.rows[r][1]:
-                    self.rows[r][1].remove[col]
-                    if len(self.rows[r][1]) == 0:
-                        del self.rows[r] # last entry in row
-                    return # removed it
-                return # not there
-            if self.rows[r][0] < row: # not there, no such row
-                return
-        # not there, after last current row
