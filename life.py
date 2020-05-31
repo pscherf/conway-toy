@@ -13,13 +13,34 @@ class column_scanner(object):
     Arguments to get_count must be non-decreasing.
 
     self.nxt_iter is the column iterator.
-    self.prv is the cell to the left ow/ None.
-    self.cur is the current cell ow/ None.
-    self.nxt is the next cell to scan ow/ None.
-    assert: self.prv < self.cur < self.nxt, if they are not None
-    assert: self.prv is None or self.prv < col
-    assert: self.cur is None or col <= self.cur (or col <= self.cur + 1)
+    self.prv is the column to the left of self.cur ow/ None.
+    self.cur is the current column ow/ None.
+    self.nxt is the next column after self.cur ow/ None.
+    initially we are before the first column, self.prv and self.cur are None
+
+    assert: self.prv is None or self.cur is None or self.prv < self.cur
+    assert: self.cur is None or self.cur <= col
     assert: self.nxt is None or col < self.nxt
+
+    get_count strategy: self.prv < self.cur <= col < self.nxt
+
+    rule: it is not allowed to call get_count with a smaller col than before.
+    rule: it is not allowed to call get_count with the same col twice.
+    get_count advances to the next state when called.
+    These rules allow not having a dummy scan at the end of every row.
+
+    _get... name key: after _get is a sequence of what needs to happen
+    curnxt = while col < self.nxt - 1: return 0
+    1 = return 1
+    2 = return 2
+    3 = return 3
+    0 = while True: return 0
+    _first = _advance_first
+    _plain = _advance_plain
+    _last = _advance_last
+    _only = _advance_only
+    This means get_count contains the current state
+
     self.on_empty is called when the scan passes the last column
 
     self.get_XY
@@ -31,250 +52,170 @@ class column_scanner(object):
     def __init__(self, col_list, on_empty):
         self.nxt_iter = col_list.__iter__()
         self.on_empty = on_empty
-        #
         self.prv = None
-        if len(col_list) == 0:
-            self.cur = None # None never == col
+        self.cur = None # None never == col
+        if len(col_list) == 0: # an empty row
             self.nxt = None
             self.on_empty()
-            self.get_count = self._get_end
+            self.get_count = self._get_0
             return
-        # get a first self.cur
-        self.cur = next(self.nxt_iter)
-        if len(col_list) == 1:
-            self.nxt = None
-            self.get_count = self._get_nx
-            return
-        # get a first self.nxt
         self.nxt = next(self.nxt_iter)
-        if self.cur == self.nxt - 1:
-            self.get_count = self._get_n0
-        elif self.cur == self.nxt - 2:
-            self.get_count = self._get_n1
-        else:
-            self.get_count = self._get_nn
+        self.get_count = self._get_curnxt_only_1 if len(col_list) == 1 else self._get_curnxt_1_first
 
-    # assumes get_count was just called with the same col
-    def is_live(self, col): return col == self.cur or col == self.prv or col == self.nxt
+    # assert: get_count has never been called
+    def first_interesting_column(self): return None if self.nxt is None else self.nxt - 1
 
-    def first_interesting_column(self): return None if self.cur is None else self.cur - 1
+    # assert: get_count was just called with the same col
+    def is_live(self, col): return col == self.cur or col == self.nxt or col == self.prv
 
-    # assumes get_count was just called with the same col
-    def next_interesting_column(self, col): # ow/ None
-        # assert: self.prv < col <= self.cur + 1, unless self.prv or self.cur are None
-        if self.cur is not None: # cur - 1, cur, cur + 1
-            if col < self.cur - 1:
-                return self.cur - 1
-            if col < self.cur + 1:
-                return col + 1
-        if self.nxt is not None: # nxt - 1, nxt, nxt + 1
-            if col < self.nxt - 1:
-                return self.nxt - 1
-            if col < self.nxt + 1:
-                return col + 1
-        return None # nothing is interesting
+    # assert: get_count was just called with the same col
+    def next_interesting_column(self, col):
+        prv = self.prv
+        if prv is not None and col <= prv: # self.prv could have been self.cur just before get_count(col)
+            if col < prv - 1: return prv - 1
+            elif col == prv - 1: return prv
+            else: return prv + 1
+        cur = self.cur
+        if cur is not None and col <= cur:
+            if col < cur - 1: return cur - 1
+            elif col == cur - 1: return cur
+            else: return cur  + 1
+        nxt = self.nxt
+        if nxt is not None and col <= nxt:
+            if col < nxt - 1: return nxt - 1
+            if col == nxt - 1: return nxt
+            else: return nxt + 1
+        return None
 
-    # get_count
+    # _first
 
-    def _advance_not_end(self, col):
-        ''' Advance from the current get_*[01n] to the next get_* '''
-        while col > self.cur:
-            self.prv = self.cur
-            self.cur = self.nxt
-            try:
-                self.nxt = next(self.nxt_iter)
-            except StopIteration: # *x
-                self.nxt = None
-                if self.prv + 1 == self.cur:
-                    self.get_count = self._get_0x
-                elif self.prv + 2 == self.cur:
-                    self.get_count = self._get_1x
-                elif self.prv + 3 == self.cur:
-                    self.get_count = self._get_2x
-                else:
-                    self.get_count = self._get_nx
-                break
-        else:
-            if self.cur == self.nxt - 1: # *0
-                if self.prv + 1 == self.cur:
-                    self.get_count = self._get_00
-                elif self.prv + 2 == self.cur:
-                    self.get_count = self._get_10
-                elif self.prv + 3 == self.cur:
-                    self.get_count = self._get_20
-                else:
-                    self.get_count = self._get_n0
-            elif self.cur == self.nxt - 2: # *1
-                if self.prv + 1 == self.cur:
-                    self.get_count = self._get_01
-                elif self.prv + 2 == self.cur:
-                    self.get_count = self._get_11
-                elif self.prv + 3 == self.cur:
-                    self.get_count = self._get_21
-                else:
-                    self.get_count = self._get_n1
-            else: # self.cur < self.nxt - 2 # *n
-                if self.prv + 1 == self.cur:
-                    self.get_count = self._get_0n
-                elif self.prv + 2 == self.cur:
-                    self.get_count = self._get_1n
-                elif self.prv + 3 == self.cur:
-                    self.get_count = self._get_2n
-                else:
-                    self.get_count = self._get_nn
+    def _get_curnxt_1_first(self, col): # cur_nxt=0=col . nxtm1=1 . nxt
+        if col < self.nxt - 1:
+            return 0
+        self.get_count = self._get_1_first
         return self.get_count(col)
 
-    def _advance_from_end(self, col): # end
-        ''' Advance from the current get_*x to _get_end '''
+    def _get_1_first(self, col): # nxtm1=1 . nxt
+        self._advance_first(col)
+        return 1
+
+    def _advance_first(self, col):
+        ''' The first advance of the row '''
+        self.prv = self.cur # None
+        self.cur = self.nxt # not None
+        try:
+            self.nxt = next(self.nxt_iter)
+            self.get_count = [self._get_plain_2, self._get_1_plain_2, self._get_1_1_plain_1, self._get_1_1_curnxt_plain_1][min(self.nxt - self.cur - 1, 3)]
+        except StopIteration: # *x
+            self.nxt = None
+            self.get_count = [self._get_2_last_1, self._get_1_last_1][min(self.cur - self.prv - 1, 1)]
+
+    # _plain
+
+    def _get_plain_3(self, col): # prv . cur=3=col . nxt
+        self._advance_plain(col)
+        return 3
+
+    def _get_2_plain_2(self, col): # prv . cur=2=col . nxtm1=2 . nxt
+        self.get_count = self._get_plain_2
+        return 2
+
+    def _get_2_1_plain_1(self, col): # prv . cur=2=col . curp1=1 . nxtm1=1 . nxt
+        self.get_count = self._get_1_plain_1
+        return 2
+
+    def _get_2_1_curnxt_plain_1(self, col): # prv . cur=2=col . curp1=1 . cur_nxt=0 . nxtm1=1 . nxt
+        self.get_count = self._get_1_curnxt_plain_1
+        return 2
+
+    def _get_1_plain_2(self, col): # prv . curm1 . cur=1=col . nxtm1=2 . nxt
+        self.get_count = self._get_plain_2
+        return 1
+
+    def _get_plain_2(self, col): # nxtm1=2=col . nxt
+        self._advance_plain(col)
+        return 2
+
+    def _get_1_1_plain_1(self, col): # prv . curm1 . cur=1=col . curp1=1 . nxtm1=1 . nxt
+        self.get_count = self._get_1_plain_1
+        return 1
+
+    def _get_1_plain_1(self, col): # curp1=1=col . nxtm1=1 . nxt
+        self.get_count = self._get_plain_1
+        return 1
+
+    def _get_1_1_curnxt_plain_1(self, col): # prv . curm1 . cur=1=col . curp1=1 . cur_nxt=0 . nxtm1=1 . nxt
+        self.get_count = self._get_1_curnxt_plain_1
+        return 1
+
+    def _get_1_curnxt_plain_1(self, col): # curp1=1=col . cur_nxt=0 . nxtm1=1 . nxt
+        self.get_count = self._get_curnxt_plain_1
+        return 1
+    def _get_curnxt_plain_1(self, col): # cur_nxt=0=col . nxtm1=1 . nxt
+        if col < self.nxt - 1:
+            return 0
+        self.get_count = self._get_plain_1
+        return self.get_count(col)
+
+    def _get_plain_1(self, col): # nxtm1=1=col . nxt
+        self._advance_plain(col)
+        return 1
+
+    def _advance_plain(self, col):
+        ''' Plain middle advances '''
+        self.prv = self.cur
+        self.cur = self.nxt
+        try:
+            self.nxt = next(self.nxt_iter)
+            self.get_count = [
+                    [self._get_plain_3, self._get_2_plain_2, self._get_2_1_plain_1, self._get_2_1_curnxt_plain_1],
+                    [self._get_plain_2, self._get_1_plain_2, self._get_1_1_plain_1, self._get_1_1_curnxt_plain_1]
+                    ][min(self.cur - self.prv - 1, 1)][min(self.nxt - self.cur - 1, 3)]
+        except StopIteration: # There are no more columns
+            self.nxt = None
+            self.get_count = [self._get_2_last_1, self._get_1_last_1][min(self.cur - self.prv - 1, 1)]
+
+    # _last
+
+    def _get_2_last_1(self, col): # prv . cur=2=col . curp1=1 . ...
+        self.get_count = self._get_last_1
+        return 2
+
+    def _get_1_last_1(self, col): # cur=1=col . curp1=1 . ...
+        self.get_count = self._get_last_1
+        return 1
+
+    def _get_last_1(self, col): # curp1=1=col . ...
+        self._advance_last(col)
+        return 1
+
+    def _advance_last(self, col): # end
+        ''' Plain last advance '''
         self.prv = self.cur
         self.cur = None # never == col
         self.on_empty()
-        self.get_count = self._get_end
-        return self.get_count(col) # parameter ignored
+        self.get_count = self._get_0
 
-    def _get_00(self, col):
-        ''' prv cur nxt
-             .   3   . '''
-        if col <= self.cur:
-            return 3
-        return self._advance_not_end(col)
+    # _only
 
-    def _get_10(self, col):
-        ''' prv  .  cur nxt
-             .   2   2   . '''
-        if col <= self.cur:
-            return 2
-        return self._advance_not_end(col)
-
-    def _get_20(self, col):
-        ''' prv  .   .  cur nxt
-             .   1   1   2   . '''
-        if col < self.cur:
-            return 1
-        if col == self.cur:
-            return 2
-        return self._advance_not_end(col)
-
-    def _get_n0(self, col):
-        ''' ...  .  cur nxt
-             0   1   2   . '''
-        if col < self.cur - 1:
+    def _get_curnxt_only_1(self, col): # cur_nxt=0=col . nxtm1=1 . cur=1 . curp1=1 . ...
+        if col < self.nxt - 1:
             return 0
-        if col < self.cur:
-            return 1
-        if col <= self.cur:
-            return 2
-        return self._advance_not_end(col)
+        self.get_count = self._get_only_1
+        return self.get_count(col)
+    def _get_only_1(self, col): # nxtm1=1=col . cur=1 . curp1=1 . ...
+        self._advance_only(col)
+        return 1
+    def _advance_only(self, col):
+        ''' The middle advance for a row with only one column '''
+        self.prv = self.cur
+        self.cur = self.nxt
+        self.nxt = None
+        self.get_count = self._get_1_last_1
 
-    def _get_01(self, col):
-        ''' prv cur  .  nxt
-             .   2   2   . '''
-        if col <= self.cur + 1:
-            return 2
-        return self._advance_not_end(col)
+    # _0
 
-    def _get_11(self, col):
-        ''' prv  .  cur  .  nxt
-             .   2   1   2   . '''
-        if col < self.cur:
-            return 2
-        if col <= self.cur:
-            return 1
-        if col <= self.cur + 1:
-            return 2
-        return self._advance_not_end(col)
-
-    def _get_21(self, col):
-        ''' prv  .   .  cur  .  nxt
-             .   1   1   1   2   . '''
-        if col <= self.cur:
-            return 1
-        if col <= self.cur + 1:
-            return 2
-        return self._advance_not_end(col)
-
-    def _get_n1(self, col):
-        ''' ...  .  cur  .  nxt
-             0   1   1   2   . '''
-        if col < self.cur - 1:
-            return 0
-        if col <= self.cur:
-            return 1
-        if col <= self.cur + 1:
-            return 2
-        return self._advance_not_end(col)
-
-    def _get_0n(self, col):
-        ''' prv cur  .  ... nxt
-             .   2   1   .   . '''
-        if col <= self.cur:
-            return 2
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_not_end(col)
-
-    def _get_1n(self, col):
-        ''' prv  .  cur  .  ... nxt
-             .   2   1   1   .   . '''
-        if col < self.cur:
-            return 2
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_not_end(col)
-
-    def _get_2n(self, col):
-        ''' prv  .   .  cur  .  ... nxt
-             .   1   1   1   1   .   .'''
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_not_end(col)
-
-    def _get_nn(self, col):
-        ''' ...  .  cur  .  ... nxt
-             0   1   1   1   .   . '''
-        if col < self.cur - 1:
-            return 0
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_not_end(col)
-
-    def _get_0x(self, col):
-        ''' prv cur  .  ...
-             .   2   1   . '''
-        if col <= self.cur:
-            return 2
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_from_end(col)
-
-    def _get_1x(self, col):
-        ''' prv  .  cur  .  ...
-             .   2   1   1   . '''
-        if col < self.cur:
-            return 2
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_from_end(col)
-
-    def _get_2x(self, col):
-        ''' prv  .   .  cur  .  ...
-             .   1   1   1   1   . '''
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_from_end(col)
-
-    def _get_nx(self, col):
-        ''' ...  .  cur  .  ...
-             0   1   1   1   . '''
-        if col < self.cur - 1:
-            return 0
-        if col <= self.cur + 1:
-            return 1
-        return self._advance_from_end(col)
-
-    def _get_end(self, col):
-        ''' ...
-             0 '''
+    def _get_0(self, col): # ...=0
         return 0
 
     def __str__(self):
@@ -311,11 +252,14 @@ class cw(object):
             ] if interesting_column is not None), default=None)
 
     def _next_col_number(self, col_number, cols_prv, cols_cur, cols_nxt):
-        return max(col_number + 1, min((interesting_column for interesting_column in [
-                cols_prv.next_interesting_column(col_number),
-                cols_cur.next_interesting_column(col_number),
-                cols_nxt.next_interesting_column(col_number)
-            ] if interesting_column is not None), default=col_number + 1))
+        col = cols_prv.next_interesting_column(col_number)
+        cur = cols_cur.next_interesting_column(col_number)
+        if cur is not None and (col is None or col > cur):
+            col = cur
+        nxt = cols_nxt.next_interesting_column(col_number)
+        if nxt is not None and (col is None or col > nxt):
+            col = nxt
+        return col
 
     def generation(self):
         new_rows = []
