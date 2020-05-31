@@ -68,23 +68,20 @@ class column_scanner(object):
     # assert: get_count was just called with the same col
     def is_live(self, col): return col == self.cur or col == self.nxt or col == self.prv
 
+    def _next_interesting_column_relative_to_row(self, row, col):
+        if col < row - 1:
+            return row - 1
+        if col == row - 1:
+            return row
+        return row + 1
     # assert: get_count was just called with the same col
     def next_interesting_column(self, col):
-        prv = self.prv
-        if prv is not None and col <= prv: # self.prv could have been self.cur just before get_count(col)
-            if col < prv - 1: return prv - 1
-            elif col == prv - 1: return prv
-            else: return prv + 1
-        cur = self.cur
-        if cur is not None and col <= cur:
-            if col < cur - 1: return cur - 1
-            elif col == cur - 1: return cur
-            else: return cur  + 1
-        nxt = self.nxt
-        if nxt is not None and col <= nxt:
-            if col < nxt - 1: return nxt - 1
-            if col == nxt - 1: return nxt
-            else: return nxt + 1
+        if self.prv is not None and col <= self.prv: # self.prv could have been self.cur just before get_count(col)
+            return self._next_interesting_column_relative_to_row(self.prv, col)
+        if self.cur is not None and col <= self.cur:
+            return self._next_interesting_column_relative_to_row(self.cur, col)
+        if self.nxt is not None and col <= self.nxt:
+            return self._next_interesting_column_relative_to_row(self.nxt, col)
         return None
 
     # _first
@@ -99,6 +96,10 @@ class column_scanner(object):
         self._advance_first(col)
         return 1
 
+    def _advance_end(self, col):
+        self.nxt = None
+        self.get_count = [self._get_2_last_1, self._get_1_last_1][min(self.cur - self.prv - 1, 1)]
+
     def _advance_first(self, col):
         ''' The first advance of the row '''
         self.prv = self.cur # None
@@ -107,8 +108,7 @@ class column_scanner(object):
             self.nxt = next(self.nxt_iter)
             self.get_count = [self._get_plain_2, self._get_1_plain_2, self._get_1_1_plain_1, self._get_1_1_curnxt_plain_1][min(self.nxt - self.cur - 1, 3)]
         except StopIteration: # *x
-            self.nxt = None
-            self.get_count = [self._get_2_last_1, self._get_1_last_1][min(self.cur - self.prv - 1, 1)]
+            self._advance_end(col)
 
     # _plain
 
@@ -172,8 +172,7 @@ class column_scanner(object):
                     [self._get_plain_2, self._get_1_plain_2, self._get_1_1_plain_1, self._get_1_1_curnxt_plain_1]
                     ][min(self.cur - self.prv - 1, 1)][min(self.nxt - self.cur - 1, 3)]
         except StopIteration: # There are no more columns
-            self.nxt = None
-            self.get_count = [self._get_2_last_1, self._get_1_last_1][min(self.cur - self.prv - 1, 1)]
+            self._advance_end(col)
 
     # _last
 
