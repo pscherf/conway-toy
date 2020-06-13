@@ -5,10 +5,10 @@ import glob
 import random
 import sys
 
-class column_scanner(object):
+class cols_scanner(object):
     '''
     Scan the columns in a row.
-    column_scanner.get_count(col) returns the number of neighbors in this row at col.
+    cols_scanner.get_count(col) returns the number of neighbors in this row at col.
     get_count is set to the appropriate (get_*) method as the scan progresses.
     Arguments to get_count must be non-decreasing.
 
@@ -41,22 +41,18 @@ class column_scanner(object):
     _only = _advance_only
     This means get_count contains the current state
 
-    self.on_empty is called when the scan passes the last column
-
     self.get_XY
         X in [012n] is the number of empty cells between self.cur and self.prv, n means > 2
         Y in [01nx] is the number of empty cells between self.cur and self.nxt, n means > 1, x means there are no more self.nxt
     self.get_n? => either self.prv is None or self.prv + 1 < col
     '''
 
-    def __init__(self, col_list, on_empty):
+    def __init__(self, col_list):
         self.nxt_iter = col_list.__iter__()
-        self.on_empty = on_empty
         self.prv = None
         self.cur = None # None never == col
         if len(col_list) == 0: # an empty row
             self.nxt = None
-            self.on_empty()
             self.get_count = self._get_0
             return
         self.nxt = next(self.nxt_iter)
@@ -192,7 +188,6 @@ class column_scanner(object):
         ''' Plain last advance '''
         self.prv = self.cur
         self.cur = None # never == col
-        self.on_empty()
         self.get_count = self._get_0
 
     # _only
@@ -218,7 +213,7 @@ class column_scanner(object):
         return 0
 
     def __str__(self):
-        return ('column_scanner('
+        return ('cols_scanner('
                 + ' prv=' + str(self.prv)
                 + ' cur=' + str(self.cur)
                 + ' nxt=' + str(self.nxt)
@@ -231,95 +226,34 @@ class cw(object):
     def __init__(self, initial_rows=None):
         self.rows = [] if initial_rows is None else initial_rows # [(row_number, [col_number ...])]
 
-    def prt(self, scr):
+    # displaying
+
+    def bounds(self): # (top, left, bottom, right)
+        if len(self.rows) > 0:
+            return (self.rows[0][0], min(row[1][0] for row in self.rows), self.rows[-1][0] + 1, max(row[1][-1] for row in self.rows) + 1)
+        else:
+            return (None, None, None, None)
+
+    def prt(self, scr, cw_top=0, cw_left=0, top=0, left=0, bottom=None, right=None):
+        if bottom is None: bottom = r_max
+        if right is None: right = c_max
+        row_delta = top - cw_top
+        col_delta = left - cw_left
+        cw_bottom = bottom - row_delta
+        cw_right = right - col_delta
         scr.clear()
         for row_number, cols in self.rows: # [(row_number, [col_number ...]) ...]
-            if r_max <= row_number: # the rest is below the bottom of the screen
+            if cw_bottom <= row_number: # the rest is below the bottom of the screen
                 break
-            if 0 <= row_number: # else above the top of the screen
+            if cw_top <= row_number: # else above the top of the screen
+                screen_row = row_number + row_delta
                 for col_number in cols:
-                    if c_max <= col_number: # stuff to the right of the screen
+                    if cw_right <= col_number: # the rest is to the right of the screen
                         break
-                    if 0 <= col_number: # else stuff to the left of the screen
-                        scr.addch(row_number, col_number, '*')
+                    if cw_left <= col_number: # else to the left of the screen
+                        scr.addch(screen_row, col_number + col_delta, '*')
 
-    def _first_col_number(self, cols_prv, cols_cur, cols_nxt):
-        return min((interesting_column for interesting_column in [
-                cols_prv.first_interesting_column(),
-                cols_cur.first_interesting_column(),
-                cols_nxt.first_interesting_column()
-            ] if interesting_column is not None), default=None)
-
-    def _next_col_number(self, col_number, cols_prv, cols_cur, cols_nxt):
-        col = cols_prv.next_interesting_column(col_number)
-        cur = cols_cur.next_interesting_column(col_number)
-        if cur is not None and (col is None or col > cur):
-            col = cur
-        nxt = cols_nxt.next_interesting_column(col_number)
-        if nxt is not None and (col is None or col > nxt):
-            col = nxt
-        return col
-
-    def generation(self):
-        new_rows = []
-        row_prv = None # old row_number_new - 1 ow/ None
-        row_cur = None # old row_number_new ow/ None
-        row_nxt = None # old row_number_new + 1 ow/ None
-        r = 0 # next self.rows[*} to pull in
-        len_self_rows = len(self.rows)
-        while True:
-            # calculate row_number_new, advance row_*, r
-            if row_cur is not None: # advance to row_cur[0] + 1
-                row_number_new = row_cur[0] + 1
-                row_prv = row_cur
-                row_cur = row_nxt
-                if r < len_self_rows and self.rows[r][0] == row_number_new + 1:
-                    row_nxt = self.rows[r]
-                    r += 1
-                else:
-                    row_nxt = None
-            elif row_nxt is not None: # row_cur is None, advance to row_nxt[0]
-                row_number_new = row_nxt[0]
-                row_prv = None
-                row_cur = row_nxt
-                if r < len_self_rows and self.rows[r][0] == row_number_new + 1:
-                    row_nxt = self.rows[r]
-                    r += 1
-                else:
-                    row_nxt = None
-            elif r < len_self_rows: # row_cur is None and row_nxt is None, advance to self.rows[r][0] - 1
-                row_number_new = self.rows[r][0] - 1
-                row_prv = None
-                row_cur = None
-                row_nxt = self.rows[r]
-                r += 1
-            else: # row_cur is None and row_nxt is None and r == len_self_rows, stop
-                break
-
-            # produce new row (a new row_cur)
-
-            past_end_list = [0]
-            def on_past_end(past_end_list=past_end_list): past_end_list[0] += 1
-            cols_prv = column_scanner(row_prv[1] if row_prv else [], on_past_end)
-            cols_cur = column_scanner(row_cur[1] if row_cur else [], on_past_end)
-            cols_nxt = column_scanner(row_nxt[1] if row_nxt else [], on_past_end)
-
-            cols_new = [] # the new cols_cur
-            col_number = self._first_col_number(cols_prv, cols_cur, cols_nxt)
-            while past_end_list[0] < 3:
-                ## append new item to cols_new, if needed
-                neighbor_count = cols_prv.get_count(col_number) + cols_cur.get_count(col_number) + cols_nxt.get_count(col_number)
-                if cols_cur.is_live(col_number):
-                    if neighbor_count - 1 in [2, 3]:
-                        cols_new.append(col_number)
-                else:
-                    if neighbor_count == 3:
-                        cols_new.append(col_number)
-                col_number = self._next_col_number(col_number, cols_prv, cols_cur, cols_nxt)
-            if len(cols_new) > 0:
-                new_rows.append((row_number_new, cols_new))
-
-        return cw(new_rows)
+    # editing
 
     def is_set(self, row, col):
         for row_number, cols in self.rows:
@@ -328,10 +262,6 @@ class cw(object):
             elif row_number > row: # no such row
                 return False
         return False # below everything
-
-    def clr(self, row, col): self._change(row, col, -1)
-    def toggle(self, row, col): self._change(row, col, 0)
-    def set(self, row, col): self._change(row, col, 1)
 
     def _change(self, row, col, change_type): # -1 == clr, 0 == toggle, 1 == set
         for r in range(len(self.rows)):
@@ -354,123 +284,167 @@ class cw(object):
                 if change_type != -1: self.rows.insert(r, (row, [col]))
                 return
         if change_type != -1: self.rows.append((row, [col])) # new row at end
+    def clr(self, row, col): self._change(row, col, -1)
+    def toggle(self, row, col): self._change(row, col, 0)
+    def set(self, row, col): self._change(row, col, 1)
 
     def clear(self): self.rows = []
 
+    def _merge_row(self, old_cols, the_cols):
+        if len(the_cols) <= 0: # nothing to add
+            return old_cols
+        the_cols_iter = the_cols.__iter__()
+        the_col = next(the_cols_iter)
+        new_cols = []
+        try:
+            old_cols_iter = old_cols.__iter__()
+            old_col = next(old_cols_iter)
+            while True:
+                while the_col > old_col:
+                    new_cols.append(old_col)
+                    old_col = next(old_cols_iter)
+                # the_col <= old_col
+                try:
+                    while the_col < old_col:
+                        new_cols.append(the_col)
+                        the_col = next(the_cols_iter)
+                    # the_col >= old_col
+                except StopIteration:
+                    new_cols.append(old_col)
+                    new_cols.extend(old_cols_iter)
+                    break
+                if the_col != old_col:
+                    continue
+                try:
+                    new_cols.append(old_col)
+                    the_col = next(the_cols_iter)
+                except StopIteration:
+                    # new_cols.append(old_col)
+                    new_cols.extend(old_cols_iter)
+                    break
+                old_col = next(old_cols_iter)
+        except StopIteration:
+            new_cols.append(the_col)
+            new_cols.extend(the_cols_iter)
+        return new_cols
+    def merge(self, the_rows):
+        if len(the_rows) <= 0: # nothing to add
+            return
+        the_rows_iter = the_rows.__iter__()
+        the_row_number, the_cols = next(the_rows_iter)
+        new_rows = [(0, [0, 1])]
+        try:
+            old_rows_iter = self.rows.__iter__()
+            old_row_number, old_cols = next(old_rows_iter)
+            while True:
+                while the_row_number > old_row_number:
+                    new_rows.append((old_row_number, old_cols))
+                    old_row_number, old_cols = next(old_rows_iter)
+                # the_row_number <= old_row_number
+                try:
+                    while the_row_number < old_row_number:
+                        new_rows.append((the_row_number, the_cols[:]))
+                        the_row_number, the_cols = next(the_rows_iter)
+                    # the_row_number >= old_row_number
+                except StopIteration:
+                    new_rows.append((old_row_number, old_cols))
+                    new_rows.extend(old_rows_iter)
+                    break
+                if the_row_number != old_row_number:
+                    continue
+                try:
+                    new_rows.append((the_row_number, self._merge_row(old_cols, the_cols))) # merge the two rows
+                    the_row_number, the_cols = next(the_rows_iter)
+                except StopIteration:
+                    # new_rows.append((old_row_number, old_cols))
+                    new_rows.extend(old_rows_iter)
+                    break
+                old_row_number, old_cols = next(old_rows_iter)
+        except StopIteration:
+            new_rows.append((the_row_number, the_cols[:]))
+            new_rows.extend((row_number, cols[:]) for row_number, cols in the_rows_iter)
+        self.rows = new_rows
+
+    # generations
+
+    def _best_col_number(self, prv, cur, nxt):
+        if cur is not None and (prv is None or prv > cur): prv = cur
+        if nxt is not None and (prv is None or prv > nxt): prv = nxt
+        return prv
+
+    def _first_col_number(self, prv_cols, cur_cols, nxt_cols):
+        return self._best_col_number(
+            prv_cols.first_interesting_column(),
+            cur_cols.first_interesting_column(),
+            nxt_cols.first_interesting_column())
+
+    def _next_col_number(self, col_number, prv_cols, cur_cols, nxt_cols):
+        return self._best_col_number(
+            prv_cols.next_interesting_column(col_number),
+            cur_cols.next_interesting_column(col_number),
+            nxt_cols.next_interesting_column(col_number))
+
+    def generation(self):
+        new_rows = []
+        prv_row = None # new_row_number - 1 ow/ None
+        cur_row = None # new_row_number ow/ None
+        nxt_row = None # new_row_number + 1 ow/ None
+        r = 0 # next self.rows[*} to pull in
+        len_self_rows = len(self.rows)
+        while True:
+            # calculate new_row_number, advance row_*, r
+            if cur_row is not None: # advance to cur_row[0] + 1
+                new_row_number = cur_row[0] + 1
+                prv_row = cur_row
+                cur_row = nxt_row
+                if r < len_self_rows and self.rows[r][0] == new_row_number + 1:
+                    nxt_row = self.rows[r]
+                    r += 1
+                else:
+                    nxt_row = None
+            elif nxt_row is not None: # cur_row is None, advance to nxt_row[0]
+                new_row_number = nxt_row[0]
+                prv_row = None
+                cur_row = nxt_row
+                if r < len_self_rows and self.rows[r][0] == new_row_number + 1:
+                    nxt_row = self.rows[r]
+                    r += 1
+                else:
+                    nxt_row = None
+            elif r < len_self_rows: # cur_row is None and nxt_row is None, advance to self.rows[r][0] - 1
+                new_row_number = self.rows[r][0] - 1
+                prv_row = None
+                cur_row = None
+                nxt_row = self.rows[r]
+                r += 1
+            else: # cur_row is None and nxt_row is None and r == len_self_rows, stop
+                break
+
+            # produce new row (a new cur_row)
+
+            prv_cols = cols_scanner(prv_row[1] if prv_row else [])
+            cur_cols = cols_scanner(cur_row[1] if cur_row else [])
+            nxt_cols = cols_scanner(nxt_row[1] if nxt_row else [])
+
+            new_cols = [] # the new cur_cols
+            col_number = self._first_col_number(prv_cols, cur_cols, nxt_cols)
+            while col_number is not None:
+                ## append new item to new_cols, if needed
+                neighbor_count = prv_cols.get_count(col_number) + cur_cols.get_count(col_number) + nxt_cols.get_count(col_number)
+                if cur_cols.is_live(col_number):
+                    if neighbor_count - 1 in [2, 3]:
+                        new_cols.append(col_number)
+                else:
+                    if neighbor_count == 3:
+                        new_cols.append(col_number)
+                col_number = self._next_col_number(col_number, prv_cols, cur_cols, nxt_cols)
+            if len(new_cols) > 0:
+                new_rows.append((new_row_number, new_cols))
+
+        return cw(new_rows)
+
     def __str__(self):
         return '[' + ' '.join('(' + str(row_number) + ', ' + '[' + ', '.join(str(c) for c in cols) + ']' + ')' for row_number, cols in self.rows) + ']'
-
-# cw tests
-
-def screen_test(stdscr):
-    width = 64
-    height = 64
-    margin = 10
-    failed = False
-    stdscr.clear()
-    random.seed(1) # so we can re-run the test
-
-    if width + margin + width >= c_max:
-        stdscr.addstr(0, 0, 'width=' + str(width) + ' + ' + ' margin=' + str(margin) + ' + ' + ' width=' + str(width) + ' >= ' + ' cols=' + str(c_max))
-        failed = True
-    if height + margin + height >= r_max:
-        stdscr.addstr(1, 0, 'height=' + str(height) + ' + ' + ' margin=' + str(margin) + ' + ' + ' height=' + str(height) + ' >= ' + ' cols=' + str(r_max))
-        failed = True
-    if failed:
-        return
-
-    # initialize old_screen
-    old_screen = [[random.randrange(2) != 0 for _ in range(width)] for _ in range(height)]
-
-    # initialize old_conway
-    old_conway = cw()
-    for r in range(height):
-        for c in range(width):
-            if old_screen[r][c]:
-                old_conway.set(r, c)
-
-    # calculate new_screen
-    def calculate(row, col):
-        is_live = False
-        count = 0
-        for r in range(3):
-            for c in range(3):
-                r_sub = row + r - 1
-                c_sub = col + c - 1
-                if 0 <= r_sub < height and 0 <= c_sub < width and old_screen[r_sub][c_sub]:
-                    if r == 0 and c == 0:
-                        is_live = True
-                    else:
-                        count += 1
-        if is_live:
-            return count in [2, 3]
-        else:
-            return count == 3
-    new_screen = [[calculate(row, col) for col in range(width)] for row in range(height)]
-
-    # calculate new_conway
-    new_conway = old_conway.generation()
-
-    # compare solution
-    for row in range(1, height - 1):
-        for col in range(1, width - 1):
-            if new_screen[row][col] != new_conway.is_set(row, col):
-                failed = True
-                break
-        if failed:
-            break
-    if failed:
-        # show old_conway at (0, 0)
-        for row in range(height):
-            for col in range(width):
-                stdscr.addch(row + 0, col + 0, '*' if old_conway.is_set(row, col) else '.')
-        # show new_screen at (0, width + margin)
-        for row in range(height):
-            for col in range(width):
-                stdscr.addch(row + 0, col + width + margin, '*' if new_screen[row][col] else '.')
-        # show new_conway at (height + margin, 0)
-        for row in range(height):
-            for col in range(width):
-                stdscr.addch(row + height + margin, col, '*' if new_conway.is_set(row, col) else '.')
-        # show diff? at (height + margin, width + margin)
-        for row in range(height):
-            for col in range(width):
-                stdscr.addch(row + height + margin, col + width + margin, '+' if new_screen[row][col] != new_conway.is_set(row, col) else '.')
-    else:
-        stdscr.addstr(0, 0, 'screen_test: succeeded')
-
-def parallel(stdscr, conway):
-    def from_conway(conway, row, col):
-        count = 0
-        for r in range(3):
-            for c in range(3):
-                is_set = conway.is_set(row + r - 1, col + c - 1)
-                if r == 1 and c == 1:
-                    is_live = is_set
-                else:
-                    count += int(is_set)
-        if is_live:
-            return count in [2, 3]
-        else:
-            return count == 3
-
-
-    # compute next generation from conway into a 2D array (new_screen)
-    new_screen = [[from_conway(conway, row, col) for col in range(c_max)] for row in range(r_max)]
-    # new_conway = conway.generation()
-    new_conway = conway.generation()
-    # compare new_conway to new_screen
-    # display differences (in color?)
-    curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_RED)
-    for row in range(r_max):
-        for col in range(c_max):
-            cw = new_conway.is_set(row, col)
-            s = new_screen[row][col]
-            if cw == s:
-                stdscr.addch(row, col, '*' if cw else ' ')
-            else:
-                stdscr.addch(row, col, '*' if cw else ' ', curses.color_pair(1))
-    return new_conway
 
 # utilities
 
@@ -498,44 +472,47 @@ def add_cw_at(conway, y, x, filename):
             row = cw_lim(row + 1, r_max)
 
 def add_rle_at(conway, y, x, filename):
+    new_rows = []
+    new_row = []
+    row = y
+    col = x
+    number = 0
     with open(filename, 'r') as f:
-        line = f.readline()
-        while True:
-            if line[0] != '#':
-                break
-            line = f.readline()
-        if line[0] == 'x':
-            line = f.readline()
-        row = y
-        col = x
-        number = 0
-        while True:
+        for line in f:
+            if len(line) <= 0:
+                continue
+            if line[0] == '#':
+                continue
+            if line[0] == 'x':
+                continue
             for c in line:
                 if c.isdigit():
                     number = 10 * number + ord(c) - ord('0')
                 elif c == 'b':
-                    for _ in range(max(number, 1)):
-                        conway.clr(row, col)
-                        col = cw_lim(col + 1, c_max)
+                    col = cw_lim(col + max(number, 1), c_max)
                     number = 0
                 elif c == 'o':
                     for _ in range(max(number, 1)):
-                        conway.set(row, col)
+                        new_row.append(col)
                         col = cw_lim(col + 1, c_max)
                     number = 0
                 elif c == '$':
-                    for _ in range(max(number, 1)):
-                        row = cw_lim(row + 1, r_max)
+                    if len(new_row) > 0: new_rows.append((row, new_row))
+                    new_row = []
+                    row = cw_lim(row + max(number, 1), r_max)
                     col = x
                     number = 0
                 elif c == '!':
-                    return
-                # else some unknown character
-            line = f.readline()
+                    break
+                # else some unknown character, ignore it
+    if len(new_row) > 0: new_rows.append((row, new_row))
+    conway.merge(new_rows)
 
+menu_item_number = 0
 def get_menu(scr):
+    global menu_item_number
     # build menu
-    filenames = glob.glob('*.cw') + glob.glob('*.rle')
+    filenames = sorted(glob.glob('*.cw') + glob.glob('*.rle'))
     height = len(filenames) + 2
     width = max((1 + len(filename) + 1 for filename in filenames), default=40)
     begin_y = r_max // 16
@@ -547,59 +524,56 @@ def get_menu(scr):
             menu.addstr(i + 1, 1, filename)
         # put up menu
         menu.refresh(0,0, begin_y,begin_x, begin_y+height-1,begin_x+width-1)
-        number = 0
-        scr.move(begin_y + number + 1, begin_x + 1)
+        menu_item_number = lim(menu_item_number, height - 2)
+        scr.move(begin_y + menu_item_number + 1, begin_x + 1)
         # process menu input
         while True:
             c = scr.getch()
             if c < 0:
                 continue
             if c == curses.KEY_UP:
-                number = lim(number - 1, height - 2)
+                menu_item_number = lim(menu_item_number - 1, height - 2)
             elif c == curses.KEY_DOWN:
-                number = lim(number + 1, height - 2)
+                menu_item_number = lim(menu_item_number + 1, height - 2)
             elif c == ord('\t'): # tab
                 return None
             elif c == ord('\n'):
-                return filenames[number]
-            scr.move(begin_y + number + 1, begin_x + 1)
+                return filenames[menu_item_number]
+            scr.move(begin_y + menu_item_number + 1, begin_x + 1)
     finally:
         del menu
 
+# TODO: torus mode ??? new cw.generation() method
+# TODO: window panning ??? pan a little (a few lines, 1/10 of the screen) when cursor goes off screen. pan half/most of screen with shift-arrow, bring cursor along
 def main(stdscr):
     global r_max, c_max
     stdscr.clear()
     stdscr.nodelay(True)
-    # stdscr.timeout(1)
     stdscr.leaveok(False)
 
     r_max, c_max = curses.LINES, curses.COLS # stdscr.getmaxyx()
-    c_max -= 1 # not sure why it breaks without this
+    c_max -= 1 # TODO: not sure why it breaks without this
 
-    row = r_max // 2
-    col = c_max // 2
+    row, col = r_max // 2, c_max // 2 # cursor position
+    cw_top, cw_left = 0, 0 # cw coordinates of stdscr (0, 0)
 
     conway = cw()
-    y = 0
-    x = 0
-    conway.set(y + 0, x + 1)
-    conway.set(y + 1, x + 2)
-    conway.set(y + 2, x + 0)
-    conway.set(y + 2, x + 1)
-    conway.set(y + 2, x + 2)
-    conway.prt(stdscr)
+    conway.set(row + 0, col + 1)
+    conway.set(row + 1, col + 2)
+    conway.set(row + 2, col + 0)
+    conway.set(row + 2, col + 1)
+    conway.set(row + 2, col + 2)
+    conway.prt(stdscr, cw_top, cw_left)
 
     fuse = 0
 
+    # if you change conway, call conway.prt()
     while True:
-        # then do a generation
+        # do a generation, if running
         if fuse != 0:
             if fuse > 0: fuse -= 1
             conway = conway.generation()
-            conway.prt(stdscr)
-            if fuse == 0:
-                row = r_max // 2
-                col = c_max // 2
+            conway.prt(stdscr, cw_top, cw_left)
         # check for input character
         stdscr.refresh()
         stdscr.move(row, col)
@@ -607,49 +581,56 @@ def main(stdscr):
         if c < 0:
             continue
         # process input character
-        if c == ord(' '): # toggle pause
-            if fuse == 0:
-                fuse = -1
-            else:
-                fuse = 0
-                row = r_max // 2
-                col = c_max // 2
-        elif c == ord('1'): fuse = 1
-        elif c == ord('2'): fuse = 2
-        elif c == ord('3'): fuse = 3
-        elif c == ord('4'): fuse = 4
-        elif c == ord('5'): fuse = 5
-        elif c == ord('6'): fuse = 6
-        elif c == ord('7'): fuse = 7
-        elif c == ord('8'): fuse = 8
-        elif c == ord('9'): fuse = 9
+        if c == ord(' '): fuse = -1 if fuse == 0 else 0 # toggle pause
+        elif ord('1') <= c <= ord('9'): fuse = c - ord('0') # run n genrations
         elif c == curses.KEY_LEFT: col = cw_lim(col - 1, c_max)
         elif c == curses.KEY_RIGHT: col = cw_lim(col + 1, c_max)
         elif c == curses.KEY_UP: row = cw_lim(row - 1, r_max)
         elif c == curses.KEY_DOWN: row = cw_lim(row + 1, r_max)
+        elif c == ord('O'): # original origin
+            cw_top = 0
+            cw_left = 0
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('H'): # LEFT
+            cw_left -= c_max // 2
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('L'): # RIGHT
+            cw_left += c_max // 2
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('K'): # UP
+            cw_top -= r_max // 2
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('J'): # DOWN
+            cw_top += r_max // 2
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('h'): # left
+            cw_left -= c_max // 10
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('l'): # right
+            cw_left += c_max // 10
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('k'): # up
+            cw_top -= r_max // 10
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
+        elif c == ord('j'): # down
+            cw_top += r_max // 10
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
         elif c == ord('c'): # clear the whole thing
             conway.clear()
-            conway.prt(stdscr)
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
         elif c == ord('m'): # get menu input
             filename = get_menu(stdscr)
             if filename is not None:
                 if filename.endswith('.cw'):
-                    add_cw_at(conway, row, col, filename)
+                    add_cw_at(conway, cw_top + row, cw_left + col, filename)
                 elif filename.endswith('.rle'):
-                    add_rle_at(conway, row, col, filename)
+                    add_rle_at(conway, cw_top + row, cw_left + col, filename)
                 # else we don't understand filename
-                conway.prt(stdscr)
-        elif c == ord('p'): # do a parallel generation
-            fuse = 0 # make sure we are paused
-            row = 0
-            col = 0
-            conway = parallel(stdscr, conway)
-        elif c == ord('s'): # run a screen_test
-            screen_test(stdscr)
+                if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
         elif c == ord('q'): # quit
             return
         elif c == ord('.'): # toggle (row, col)
-            conway.toggle(row, col)
-            conway.prt(stdscr)
+            conway.toggle(cw_top + row, cw_left + col)
+            if fuse == 0: conway.prt(stdscr, cw_top, cw_left)
 
 curses.wrapper(main)
