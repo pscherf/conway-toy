@@ -2,8 +2,6 @@
 
 import curses
 import glob
-import random
-import sys
 
 class cols_scanner(object):
     '''
@@ -54,9 +52,9 @@ class cols_scanner(object):
         if len(col_list) == 0: # an empty row
             self.nxt = None
             self.get_count = self._get_0
-            return
-        self.nxt = next(self.nxt_iter)
-        self.get_count = self._get_curnxt_only_1 if len(col_list) == 1 else self._get_curnxt_1_first
+        else:
+            self.nxt = next(self.nxt_iter)
+            self.get_count = self._get_curnxt_only_1 if len(col_list) == 1 else self._get_curnxt_1_first
 
     # assert: get_count has never been called
     def first_interesting_column(self): return None if self.nxt is None else self.nxt - 1
@@ -448,8 +446,6 @@ class cw(object):
 
 # utilities
 
-def cw_lim(n, limit): return n
-
 def lim(n, limit):
     while n < 0: n += limit
     while n >= limit: n -= limit
@@ -468,8 +464,8 @@ def add_cw_at(conway, y, x, filename):
             for ch in line:
                 if ch == '*':
                     conway.set(row, col)
-                col = cw_lim(col + 1, c_max)
-            row = cw_lim(row + 1, r_max)
+                col += 1
+            row += 1
 
 def add_rle_at(conway, y, x, filename):
     new_rows = []
@@ -489,17 +485,17 @@ def add_rle_at(conway, y, x, filename):
                 if c.isdigit():
                     number = 10 * number + ord(c) - ord('0')
                 elif c == 'b':
-                    col = cw_lim(col + max(number, 1), c_max)
+                    col += max(number, 1)
                     number = 0
                 elif c == 'o':
                     for _ in range(max(number, 1)):
                         new_row.append(col)
-                        col = cw_lim(col + 1, c_max)
+                        col += 1
                     number = 0
                 elif c == '$':
                     if len(new_row) > 0: new_rows.append((row, new_row))
                     new_row = []
-                    row = cw_lim(row + max(number, 1), r_max)
+                    row += max(number, 1)
                     col = x
                     number = 0
                 elif c == '!':
@@ -543,8 +539,6 @@ def get_menu(scr):
     finally:
         del menu
 
-# TODO: torus mode ??? new cw.generation() method
-# TODO: window panning ??? pan a little (a few lines, 1/10 of the screen) when cursor goes off screen. pan half/most of screen with shift-arrow, bring cursor along
 def main(stdscr):
     global r_max, c_max
     stdscr.clear()
@@ -552,12 +546,13 @@ def main(stdscr):
     stdscr.leaveok(False)
 
     r_max, c_max = curses.LINES, curses.COLS # stdscr.getmaxyx()
-    c_max -= 1 # TODO: not sure why it breaks without this
+    c_max -= 1 # TODO: did not look into why it breaks without this
 
     row, col = r_max // 2, c_max // 2 # cursor position
     cw_top, cw_left = 0, 0 # cw coordinates of stdscr (0, 0)
 
     conway = cw()
+    # Add a glider
     conway.set(row + 0, col + 1)
     conway.set(row + 1, col + 2)
     conway.set(row + 2, col + 0)
@@ -565,9 +560,9 @@ def main(stdscr):
     conway.set(row + 2, col + 2)
     conway.prt(stdscr, cw_top, cw_left)
 
-    fuse = 0
+    fuse = 0 # start not running
 
-    # if you change conway, call conway.prt()
+    # convention: if you change conway, make sure conway.prt() gets called once
     while True:
         # do a generation, if running
         if fuse != 0:
@@ -583,10 +578,10 @@ def main(stdscr):
         # process input character
         if c == ord(' '): fuse = -1 if fuse == 0 else 0 # toggle pause
         elif ord('1') <= c <= ord('9'): fuse = c - ord('0') # run n genrations
-        elif c == curses.KEY_LEFT: col = cw_lim(col - 1, c_max)
-        elif c == curses.KEY_RIGHT: col = cw_lim(col + 1, c_max)
-        elif c == curses.KEY_UP: row = cw_lim(row - 1, r_max)
-        elif c == curses.KEY_DOWN: row = cw_lim(row + 1, r_max)
+        elif c == curses.KEY_LEFT: col -= 1
+        elif c == curses.KEY_RIGHT: col += 1
+        elif c == curses.KEY_UP: row -= 1
+        elif c == curses.KEY_DOWN: row += 1
         elif c == ord('O'): # original origin
             cw_top = 0
             cw_left = 0
