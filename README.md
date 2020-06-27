@@ -2,25 +2,43 @@
 A python curses script that loads/edits/runs Conway's game of life
 
 Viewing commands:
+
 space - toggle between pause and free run mode
-digit - run for "digit" genrations then pause
+
+digit - run for "digit" generations then pause
+
 H - pan left half a screen
+
 L - pan right half a screen
+
 K - pan up half a screen
+
 J - pan down half a screen
+
 h - pan left a tenth of a screen
+
 l - pan right a tenth of a screen
+
 k - pan up a tenth of a screen
+
 j - pan down a tenth of a screen
+
 O - reset the generation origin to the top left of the screen
 
 Editing commands:
+
 left arrow - move the cursor left on the screen
+
 right arrow - move the cursor right on the screen
+
 up arrow - move the cursor up on the screen
+
 down arrow - move the cursor down on the screen
+
 m - select a file to load at the cursor from the "menu"
+
 . - toggle the cell under the cursor between alive and gone
+
 c - clear, i.e. remove all individuals
 
 q - quit
